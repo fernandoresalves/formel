@@ -18,23 +18,27 @@ app.UseHttpsRedirection();
 
 app.MapPost("v1/formulas", async (FormulaContext context, PostFormula model) =>
 {
-    var formula = new Formula 
-    { 
-        Definition = model.Definition,
-        Parameters = string.Join(",", model.Parameters.ToArray()),
-        Name = model.Name,
-        Category = model.Category,
-        Description = model.Description
-    };
+   if(!context.Formulas.Any(f => f.Name == model.Name))
+    {
+        var formula = new Formula
+        {
+            Definition = model.Definition,
+            Parameters = string.Join(",", model.Parameters.ToArray()),
+            Name = model.Name,
+            Category = model.Category,
+            Description = model.Description
+        };
 
-    context.Formulas.Add(formula);
+        context.Formulas.Add(formula);
 
-    await context.SaveChangesAsync();
+        await context.SaveChangesAsync();
 
-    return Results.Created($"/formulas/{formula.Id}", formula.Id);
+        return Results.Created($"/formulas/{formula.Id}", formula.Id);
+    }
 
-})
-.WithName("Criar Fórmula");
+    return Results.BadRequest();
+
+});
 
 app.MapGet("v1/formulas/{id}", async (FormulaContext context, Guid id) =>
 {
@@ -44,7 +48,7 @@ app.MapGet("v1/formulas/{id}", async (FormulaContext context, Guid id) =>
     {
         Id = formula.Id,
         Definition = formula.Definition,
-        Parameters = formula.Parameters.Split(',').ToList(), 
+        Parameters = formula.Parameters.Split(',').ToList(),
         Name = formula.Name,
         Category = formula.Category,
         Description = formula.Description
@@ -52,12 +56,10 @@ app.MapGet("v1/formulas/{id}", async (FormulaContext context, Guid id) =>
 
     return Results.Ok(response);
 
-})
-.WithName("Obter Fórmula");
+});
 
 app.MapGet("v1/formulas/", async (FormulaContext context) =>
-    await context.Formulas.ToListAsync())
-.WithName("Listar Fórmula");
+    await context.Formulas.ToListAsync());
 
 app.MapPost("v1/formulas/execute", async (FormulaContext context, ExecuteFormula model) =>
 {
@@ -70,31 +72,38 @@ app.MapPost("v1/formulas/execute", async (FormulaContext context, ExecuteFormula
 
     return Formula.Run(formula.Definition, model.Parameters);
 
-})
-.WithName("Execute Fórmula");
+});
 
 app.MapPut("v1/formulas/{id}", async (FormulaContext context, Guid id, PutFormula model) =>
 {
-    var formula = await context.Formulas.FindAsync(id);
+    if (await context.Formulas.FindAsync(id) is Formula formula)
+    {
+        formula.Definition = model.Definition;
+        formula.Parameters = string.Join(",", model.Parameters.ToArray());
+        formula.Name = model.Name;
+        formula.Category = model.Category;
+        formula.Description = model.Description;
 
-    formula.Definition = model.Definition;
-    formula.Parameters = string.Join(",", model.Parameters.ToArray());
-    formula.Name = model.Name;
-    formula.Category = model.Category;
-    formula.Description = model.Description;
+        await context.SaveChangesAsync();
 
-    await context.SaveChangesAsync();
+        return Results.Ok();
+    }
 
-    return Results.NoContent();
+    return Results.NotFound();
 
-})
-.WithName("Atualizar Fórmula");
+});
+
+app.MapDelete("v1/formulas/{id}", async (FormulaContext context, Guid id) =>
+{
+    if (await context.Formulas.FindAsync(id) is Formula formula)
+    {
+        context.Formulas.Remove(formula);
+        await context.SaveChangesAsync();
+        return Results.Ok();
+    }
+
+    return Results.NotFound();
+
+});
 
 app.Run();
-
-class FormulaContext : DbContext
-{
-    public FormulaContext(DbContextOptions<FormulaContext> options)
-        : base(options) { }
-    public DbSet<Formula> Formulas => Set<Formula>();
-}
